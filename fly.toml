@@ -1,0 +1,38 @@
+# Fly.io config for flashy-api.
+#
+# First-time setup (does NOT deploy):
+#   fly launch --no-deploy --copy-config --name flashy-api
+# Set secrets (Neon connection string + JWT secrets + the Vercel origin):
+#   fly secrets set \
+#     DATABASE_URL="postgresql://…neon.tech/neondb?sslmode=require" \
+#     JWT_ACCESS_SECRET="$(openssl rand -base64 32)" \
+#     JWT_REFRESH_SECRET="$(openssl rand -base64 32)" \
+#     CORS_ORIGIN="https://your-app.vercel.app"
+# Deploy:
+#   fly deploy
+#
+# Use Neon's DIRECT (unpooled) connection string — the host WITHOUT `-pooler`.
+# A single always-on Fly machine holds one pg pool, so Neon's PgBouncer buys
+# nothing, and `prisma migrate deploy` (the release_command below) wants a
+# direct connection anyway.
+
+app = "flashy-api"
+primary_region = "lhr" # London — co-locate with a eu-west-2 Neon database
+
+[build]
+
+[env]
+  PORT = "3001"
+
+[http_service]
+  internal_port = 3001
+  force_https = true
+  # Scale to zero when idle (matches Neon's own scale-to-zero); Fly cold-starts
+  # the machine on the next request.
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[deploy]
+  # Runs on every deploy, before the new version takes traffic.
+  release_command = "npx prisma migrate deploy"

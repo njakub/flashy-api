@@ -10,6 +10,7 @@ async function bootstrap() {
     .map((o) => o.trim());
   app.enableCors({ origin: origins, credentials: true });
 
-  await app.listen(process.env.PORT ?? 3001);
+  // 0.0.0.0 so the container is reachable by Fly's proxy, not just localhost.
+  await app.listen(process.env.PORT ?? 3001, '0.0.0.0');
 }
 bootstrap();
