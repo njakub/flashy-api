@@ -1,4 +1,4 @@
-# Fly.io config for flashy-api.
+# fly.toml app configuration file generated for flashy-api on 2026-07-02T12:20:07Z
 #
 # First-time setup (does NOT deploy):
 #   fly launch --no-deploy --copy-config --name flashy-api
@@ -11,29 +11,29 @@
 #     ANTHROPIC_API_KEY="sk-ant-..."
 # Deploy:
 #   fly deploy
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
-# Use Neon's DIRECT (unpooled) connection string — the host WITHOUT `-pooler`.
-# A single always-on Fly machine holds one pg pool, so Neon's PgBouncer buys
-# nothing, and `prisma migrate deploy` (the release_command below) wants a
-# direct connection anyway.
 
-app = "flashy-api"
-primary_region = "lhr" # London — co-locate with a eu-west-2 Neon database
+app = 'flashy-api'
+primary_region = 'lhr'
 
 [build]
 
+[deploy]
+  release_command = 'npx prisma migrate deploy'
+
 [env]
-  PORT = "3001"
+  PORT = '3001'
 
 [http_service]
   internal_port = 3001
   force_https = true
-  # Scale to zero when idle (matches Neon's own scale-to-zero); Fly cold-starts
-  # the machine on the next request.
-  auto_stop_machines = "stop"
+  auto_stop_machines = 'stop'
   auto_start_machines = true
   min_machines_running = 0
 
-[deploy]
-  # Runs on every deploy, before the new version takes traffic.
-  release_command = "npx prisma migrate deploy"
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1
+  memory_mb = 1024
