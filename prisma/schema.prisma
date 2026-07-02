@@ -1,0 +1,156 @@
+// Flashy sync backend — Prisma schema.
+//
+// Sync model: every syncable table (Deck, Card, TestRun, TestRunQuestion) has
+// its own monotonically-increasing `rev` (bigserial). A client's sync cursor
+// is a per-table `{ decks, cards, testRuns, testRunQuestions }` revision map —
+// "pull everything where rev > cursor[table]". `rev` is bumped explicitly by
+// SyncService on every insert AND update (Prisma's autoincrement() only fires
+// on insert), via nextval() on the same underlying sequence.
+//
+// Tombstones: `deletedAt` on Deck/Card/TestRun. TestRunQuestion has no
+// deletedAt of its own — history rows are immutable and only ever removed via
+// a deck cascade, which tombstones the parent TestRun; clients cascade-delete
+// their local question rows when they see the run tombstoned.
+//
+// ids: Deck/Card/TestRun/TestRunQuestion ids are client-generated UUIDs
+// (uuidv4(), matching the existing Dexie repositories) — never server
+// defaults. User/RefreshToken ids are server-generated (cuid).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// User / auth
+// ---------------------------------------------------------------------------
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  refreshTokens RefreshToken[]
+}
+
+/// One row per issued refresh token, so multiple devices can hold
+/// independent, individually-revocable sessions. Rotated (deleted + reissued)
+/// on every /auth/refresh call.
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  /// SHA-256 hash of the raw refresh token — the raw token is never stored.
+  tokenHash String    @unique
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Deck
+// ---------------------------------------------------------------------------
+model Deck {
+  id        String    @id
+  ownerId   String
+  name      String
+  createdAt DateTime
+  updatedAt DateTime
+  deletedAt DateTime?
+  rev       BigInt    @default(autoincrement())
+
+  cards    Card[]
+  testRuns TestRun[]
+
+  @@index([ownerId, rev])
+}
+
+// ---------------------------------------------------------------------------
+// Card
+// SchedulingState is flattened (not JSON) so content fields and scheduling
+// fields can be reconciled independently — a label edit on one device must
+// never clobber a study review recorded on another, and vice versa.
+// ---------------------------------------------------------------------------
+model Card {
+  id        String    @id
+  ownerId   String
+  deckId    String
+  front     String
+  back      String
+  alternateAnswers String[]
+  labels           String[]
+  createdAt DateTime
+  updatedAt DateTime
+  deletedAt DateTime?
+  rev       BigInt    @default(autoincrement())
+
+  // --- scheduling (SM-2), reconciled by lastReviewedAt, not updatedAt ---
+  easeFactor     Float
+  intervalDays   Int
+  dueAt          DateTime
+  reps           Int
+  lapses         Int
+  lastReviewedAt DateTime?
+
+  deck Deck @relation(fields: [deckId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId, rev])
+  @@index([deckId])
+}
+
+// ---------------------------------------------------------------------------
+// TestRun — append-only, never updated. deletedAt is only ever set by a deck
+// cascade delete (mirrors DexieDeckRepository.delete's local cascade).
+// ---------------------------------------------------------------------------
+model TestRun {
+  id            String    @id
+  ownerId       String
+  deckId        String
+  startedAt     DateTime
+  completedAt   DateTime
+  questionCount Int
+  correctCount  Int
+  deletedAt     DateTime?
+  rev           BigInt    @default(autoincrement())
+
+  deck      Deck               @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  questions TestRunQuestion[]
+
+  @@index([ownerId, rev])
+  @@index([deckId])
+}
+
+enum TestOutcome {
+  CORRECT
+  INCORRECT
+}
+
+// ---------------------------------------------------------------------------
+// TestRunQuestion — append-only, immutable, never updated or individually
+// deleted. No ownerId/deletedAt of its own: ownership and lifecycle are
+// scoped through the parent TestRun (run.ownerId, run cascade).
+// ---------------------------------------------------------------------------
+model TestRunQuestion {
+  id                String      @id
+  runId             String
+  cardId            String
+  cardFrontSnapshot String
+  cardBackSnapshot  String
+  userAnswer        String
+  outcome           TestOutcome
+  similarity        Float?
+  rev               BigInt      @default(autoincrement())
+
+  run TestRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+  @@index([rev])
+}
