@@ -23,14 +23,14 @@ Health check: `curl http://localhost:3001/health` → `ok`.
 
 ## Environment variables
 
-| Variable | Required | Notes |
-|---|---|---|
-| `DATABASE_URL` | yes | Postgres connection string. Locally, the docker-compose value. In production, the Neon **direct** (unpooled) connection string — see below. |
-| `JWT_ACCESS_SECRET` | yes | Signs/verifies access tokens. Generate with `openssl rand -base64 32`. |
-| `JWT_REFRESH_SECRET` | yes | Separate secret; reserved for refresh-token handling. Generate the same way. |
-| `GOOGLE_CLIENT_ID` | yes, for Google sign-in | Verifies `POST /auth/google` ID tokens (checked as the `audience`). Same value as the frontend's `NEXT_PUBLIC_GOOGLE_CLIENT_ID`; no client secret needed. See "Google sign-in setup" below. |
-| `CORS_ORIGIN` | yes | Comma-separated allowed origins for the browser client. Locally `http://localhost:3000`; in production your Vercel URL, e.g. `https://flashy.vercel.app`. |
-| `PORT` | no | Defaults to 3001. Fly sets it via `fly.toml`. |
+| Variable             | Required                | Notes                                                                                                                                                                                       |
+| -------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`       | yes                     | Postgres connection string. Locally, the docker-compose value. In production, the Neon **direct** (unpooled) connection string — see below.                                                 |
+| `JWT_ACCESS_SECRET`  | yes                     | Signs/verifies access tokens. Generate with `openssl rand -base64 32`.                                                                                                                      |
+| `JWT_REFRESH_SECRET` | yes                     | Separate secret; reserved for refresh-token handling. Generate the same way.                                                                                                                |
+| `GOOGLE_CLIENT_ID`   | yes, for Google sign-in | Verifies `POST /auth/google` ID tokens (checked as the `audience`). Same value as the frontend's `NEXT_PUBLIC_GOOGLE_CLIENT_ID`; no client secret needed. See "Google sign-in setup" below. |
+| `CORS_ORIGIN`        | yes                     | Comma-separated allowed origins for the browser client. Locally `http://localhost:3000`; in production your Vercel URL, e.g. `https://flashy.vercel.app`.                                   |
+| `PORT`               | no                      | Defaults to 3001. Fly sets it via `fly.toml`.                                                                                                                                               |
 
 ## Google sign-in setup (one-time)
 
@@ -50,7 +50,7 @@ The app is deployed as a Docker container on Fly; Postgres lives on Neon. `Docke
 
 ### 1. Postgres on Neon
 
-Create a Neon project and copy the connection string. **Use the direct (unpooled) string** — the host *without* `-pooler`. A single always-on Fly machine holds one connection pool, so Neon's PgBouncer adds nothing, and `prisma migrate deploy` (run on every deploy) wants a direct connection. Co-locate the Neon region with the Fly `primary_region` (both London by default here: Neon `eu-west-2`, Fly `lhr`).
+Create a Neon project and copy the connection string. **Use the direct (unpooled) string** — the host _without_ `-pooler`. A single always-on Fly machine holds one connection pool, so Neon's PgBouncer adds nothing, and `prisma migrate deploy` (run on every deploy) wants a direct connection. Co-locate the Neon region with the Fly `primary_region` (both London by default here: Neon `eu-west-2`, Fly `lhr`).
 
 ### 2. API on Fly
 
@@ -66,6 +66,8 @@ fly secrets set \
 
 fly deploy
 ```
+
+For GitHub-based auto-deploys on pushes to `main`, add a repository secret named `FLY_API_TOKEN` and use a Fly access token with deploy access to this app. This repo includes [.github/workflows/deploy-fly.yml](.github/workflows/deploy-fly.yml), which also supports manual runs from the GitHub Actions UI via `workflow_dispatch`.
 
 `fly.toml`'s `release_command` runs `npx prisma migrate deploy` before each new version takes traffic, so migrations apply automatically. The machine scales to zero when idle and cold-starts on the next request.
 
