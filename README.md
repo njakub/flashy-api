@@ -6,7 +6,7 @@ Sync + auth backend for [Flashy](../flashy). NestJS + Prisma + Postgres. Exposes
 
 - **NestJS 11** — HTTP layer, DI, guards.
 - **Prisma 7** (`@prisma/adapter-pg` driver adapter) over **Postgres**.
-- **Auth** — email/password (argon2), JWT access token (15 min) + rotating refresh token (30 days, hashed at rest).
+- **Auth** — email/password (argon2) or "Sign in with Google" (ID-token verification via `google-auth-library`, accounts linked by verified email), both issuing the same JWT access token (15 min) + rotating refresh token (30 days, hashed at rest).
 - **Sync** — push+pull delta with per-table server revision cursors, tombstone deletes, and content/scheduling split reconciliation. See `src/sync/sync.service.ts`.
 
 ## Local development
@@ -28,8 +28,21 @@ Health check: `curl http://localhost:3001/health` → `ok`.
 | `DATABASE_URL` | yes | Postgres connection string. Locally, the docker-compose value. In production, the Neon **direct** (unpooled) connection string — see below. |
 | `JWT_ACCESS_SECRET` | yes | Signs/verifies access tokens. Generate with `openssl rand -base64 32`. |
 | `JWT_REFRESH_SECRET` | yes | Separate secret; reserved for refresh-token handling. Generate the same way. |
+| `GOOGLE_CLIENT_ID` | yes, for Google sign-in | Verifies `POST /auth/google` ID tokens (checked as the `audience`). Same value as the frontend's `NEXT_PUBLIC_GOOGLE_CLIENT_ID`; no client secret needed. See "Google sign-in setup" below. |
 | `CORS_ORIGIN` | yes | Comma-separated allowed origins for the browser client. Locally `http://localhost:3000`; in production your Vercel URL, e.g. `https://flashy.vercel.app`. |
 | `PORT` | no | Defaults to 3001. Fly sets it via `fly.toml`. |
+
+## Google sign-in setup (one-time)
+
+`POST /auth/google` verifies a Google ID token and links-or-creates a `User` by verified email, then issues our own JWTs exactly like `/auth/login` — Google only authenticates the person, it's never the session mechanism itself.
+
+1. [Google Cloud Console](https://console.cloud.google.com/apis/credentials) → **Create credentials → OAuth client ID** → type **Web application**.
+2. **Authorized JavaScript origins**: add `http://localhost:3000` and your production frontend URL (e.g. `https://flashy-drab.vercel.app`). No redirect URI is needed — this is the ID-token (Google Identity Services) flow, not the auth-code flow.
+3. Copy the **Client ID** and set it as **both**:
+   - `GOOGLE_CLIENT_ID` here (`.env` locally, `fly secrets set` in production)
+   - `NEXT_PUBLIC_GOOGLE_CLIENT_ID` on the frontend (`.env.local` locally, Vercel env in production)
+
+Same value, no client secret — the secret is only needed for the auth-code flow this app doesn't use.
 
 ## Deployment (Fly.io + Neon)
 
@@ -48,6 +61,7 @@ fly secrets set \
   DATABASE_URL="postgresql://…neon.tech/neondb?sslmode=require" \
   JWT_ACCESS_SECRET="$(openssl rand -base64 32)" \
   JWT_REFRESH_SECRET="$(openssl rand -base64 32)" \
+  GOOGLE_CLIENT_ID="your-client-id.apps.googleusercontent.com" \
   CORS_ORIGIN="https://your-app.vercel.app"
 
 fly deploy

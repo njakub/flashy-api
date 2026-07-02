@@ -93,7 +93,8 @@ export class SyncService {
             where: { ownerId, rev: { gt: cursorIn.decks } },
           }),
         touched.decks,
-        (ids) => this.prisma.deck.findMany({ where: { id: { in: ids }, ownerId } }),
+        (ids) =>
+          this.prisma.deck.findMany({ where: { id: { in: ids }, ownerId } }),
       ),
       this.pullSince(
         () =>
@@ -101,7 +102,8 @@ export class SyncService {
             where: { ownerId, rev: { gt: cursorIn.cards } },
           }),
         touched.cards,
-        (ids) => this.prisma.card.findMany({ where: { id: { in: ids }, ownerId } }),
+        (ids) =>
+          this.prisma.card.findMany({ where: { id: { in: ids }, ownerId } }),
       ),
       this.pullSince(
         () =>
@@ -227,7 +229,8 @@ export class SyncService {
       return;
     }
 
-    const contentWins = incomingUpdatedAt.getTime() > existing.updatedAt.getTime();
+    const contentWins =
+      incomingUpdatedAt.getTime() > existing.updatedAt.getTime();
     const schedulingWins =
       existing.lastReviewedAt === null
         ? incomingLastReviewedAt !== null
@@ -408,7 +411,9 @@ export class SyncService {
         dueAt: c.dueAt.toISOString(),
         reps: c.reps,
         lapses: c.lapses,
-        lastReviewedAt: c.lastReviewedAt ? c.lastReviewedAt.toISOString() : null,
+        lastReviewedAt: c.lastReviewedAt
+          ? c.lastReviewedAt.toISOString()
+          : null,
       },
     };
   }

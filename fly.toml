@@ -7,7 +7,8 @@
 #     DATABASE_URL="postgresql://…neon.tech/neondb?sslmode=require" \
 #     JWT_ACCESS_SECRET="$(openssl rand -base64 32)" \
 #     JWT_REFRESH_SECRET="$(openssl rand -base64 32)" \
-#     CORS_ORIGIN="https://your-app.vercel.app"
+#     CORS_ORIGIN="https://your-app.vercel.app" \
+#     ANTHROPIC_API_KEY="sk-ant-..."
 # Deploy:
 #   fly deploy
 #
