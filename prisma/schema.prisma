@@ -38,10 +38,19 @@ model User {
   googleId     String?  @unique
   name         String?
   image        String?
+  /// Which grader Test mode uses by default. AI still requires a signed-in
+  /// session client-side — this only controls the preference, sync makes it
+  /// follow the user across devices.
+  gradingDefault GradingDefault @default(LOCAL)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   refreshTokens RefreshToken[]
+}
+
+enum GradingDefault {
+  LOCAL
+  AI
 }
 
 /// One row per issued refresh token, so multiple devices can hold
@@ -92,6 +101,9 @@ model Card {
   front     String
   back      String
   alternateAnswers String[]
+  /// AI-authored justification per accepted answer, keyed by answer text.
+  /// Optional/additive — cards created before this existed have null here.
+  answerJustifications Json?
   labels           String[]
   createdAt DateTime
   updatedAt DateTime

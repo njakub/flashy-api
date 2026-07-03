@@ -15,6 +15,7 @@ export interface WireCard {
   front: string;
   back: string;
   alternateAnswers: string[];
+  answerJustifications?: Record<string, string>;
   labels: string[];
   createdAt: string;
   updatedAt: string;

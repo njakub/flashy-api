@@ -34,6 +34,7 @@ const pushCardSchema = z.object({
   front: z.string(),
   back: z.string(),
   alternateAnswers: z.array(z.string()),
+  answerJustifications: z.record(z.string(), z.string()).optional(),
   labels: z.array(z.string()),
   createdAt: z.string(),
   updatedAt: z.string(),

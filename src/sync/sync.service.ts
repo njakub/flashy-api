@@ -213,6 +213,7 @@ export class SyncService {
           front: c.front,
           back: c.back,
           alternateAnswers: c.alternateAnswers,
+          answerJustifications: c.answerJustifications ?? Prisma.JsonNull,
           labels: c.labels,
           createdAt: new Date(c.createdAt),
           updatedAt: incomingUpdatedAt,
@@ -244,6 +245,7 @@ export class SyncService {
       data.front = c.front;
       data.back = c.back;
       data.alternateAnswers = c.alternateAnswers;
+      data.answerJustifications = c.answerJustifications ?? Prisma.JsonNull;
       data.labels = c.labels;
       data.updatedAt = incomingUpdatedAt;
       data.deletedAt = c.deletedAt ? new Date(c.deletedAt) : null;
@@ -400,6 +402,8 @@ export class SyncService {
       front: c.front,
       back: c.back,
       alternateAnswers: c.alternateAnswers,
+      answerJustifications:
+        (c.answerJustifications as Record<string, string> | null) ?? undefined,
       labels: c.labels,
       createdAt: c.createdAt.toISOString(),
       updatedAt: c.updatedAt.toISOString(),
