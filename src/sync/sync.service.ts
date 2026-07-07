@@ -215,6 +215,7 @@ export class SyncService {
           alternateAnswers: c.alternateAnswers,
           answerJustifications: c.answerJustifications ?? Prisma.JsonNull,
           labels: c.labels,
+          keyPoints: c.keyPoints ?? [],
           createdAt: new Date(c.createdAt),
           updatedAt: incomingUpdatedAt,
           deletedAt: c.deletedAt ? new Date(c.deletedAt) : null,
@@ -245,8 +246,18 @@ export class SyncService {
       data.front = c.front;
       data.back = c.back;
       data.alternateAnswers = c.alternateAnswers;
-      data.answerJustifications = c.answerJustifications ?? Prisma.JsonNull;
+      // An absent optional field means "this client doesn't know about it"
+      // (an old client, or — historically — any client for
+      // answerJustifications before this guard), not "clear it"; only an
+      // explicitly-present value (including [] / {}) overwrites the column.
+      // c.f. keyPoints below, which the current client always sends.
+      if (c.answerJustifications !== undefined) {
+        data.answerJustifications = c.answerJustifications;
+      }
       data.labels = c.labels;
+      if (c.keyPoints !== undefined) {
+        data.keyPoints = c.keyPoints;
+      }
       data.updatedAt = incomingUpdatedAt;
       data.deletedAt = c.deletedAt ? new Date(c.deletedAt) : null;
     }
@@ -405,6 +416,7 @@ export class SyncService {
       answerJustifications:
         (c.answerJustifications as Record<string, string> | null) ?? undefined,
       labels: c.labels,
+      keyPoints: c.keyPoints,
       createdAt: c.createdAt.toISOString(),
       updatedAt: c.updatedAt.toISOString(),
       deletedAt: c.deletedAt ? c.deletedAt.toISOString() : null,

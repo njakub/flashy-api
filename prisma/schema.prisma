@@ -105,6 +105,11 @@ model Card {
   /// Optional/additive — cards created before this existed have null here.
   answerJustifications Json?
   labels           String[]
+  /// Rubric for concept cards (long-form interview-style questions) — a card
+  /// with keyPoints non-empty IS a concept card, no separate discriminator.
+  /// Additive; defaults to [] so no null-vs-empty ambiguity like
+  /// answerJustifications has.
+  keyPoints        String[] @default([])
   createdAt DateTime
   updatedAt DateTime
   deletedAt DateTime?

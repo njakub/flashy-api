@@ -36,6 +36,10 @@ const pushCardSchema = z.object({
   alternateAnswers: z.array(z.string()),
   answerJustifications: z.record(z.string(), z.string()).optional(),
   labels: z.array(z.string()),
+  // Rubric for concept cards — optional/additive. Absent means "an old
+  // client pushed this row and doesn't know the field", NOT "clear it";
+  // see SyncService.applyCard for the absent-vs-empty-array distinction.
+  keyPoints: z.array(z.string()).optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
   deletedAt: z.string().nullable(),
