@@ -82,7 +82,9 @@ export class AuthService {
       .catch(() => undefined);
 
     if (!payload?.email || !payload.email_verified) {
-      throw new UnauthorizedException('Invalid Google token or unverified email');
+      throw new UnauthorizedException(
+        'Invalid Google token or unverified email',
+      );
     }
 
     const { sub: googleId, email, name, picture: image } = payload;

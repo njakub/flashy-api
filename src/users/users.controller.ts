@@ -27,9 +27,6 @@ export class UsersController {
     @Body(new ZodValidationPipe(updateProfileSchema)) dto: UpdateProfileDto,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.usersService.updateGradingDefault(
-      user.userId,
-      dto.gradingDefault,
-    );
+    return this.usersService.updateProfile(user.userId, dto);
   }
 }

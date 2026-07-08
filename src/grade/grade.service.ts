@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import Anthropic from '@anthropic-ai/sdk';
-import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
+import { PrismaService } from '../prisma/prisma.service';
+import { LlmService } from '../llm/llm.service';
+import { resolveModelForTask } from '../llm/models';
 import {
   gradeResponseSchema,
   conceptGradeResponseSchema,
@@ -8,8 +9,6 @@ import {
   type GradeResponse,
   type ConceptGradeResponse,
 } from './grade.schema';
-
-const MODEL = 'claude-haiku-4-5';
 
 const SYSTEM_PROMPT = `You are grading a flashcard answer. You are given the question, the list of
 accepted answers, and the student's answer. The student is correct if their answer matches the
@@ -35,29 +34,20 @@ Reply with the structured result: "outcome", a one-sentence "rationale", and "co
 entry per key point (echo the point's exact text) with "covered" true/false. Do not reveal
 chain-of-thought; the rationale is a brief justification only.`;
 
-/**
- * Internal seam for a single-provider LLM grading call. Only AnthropicGrader
- * ships today; this interface is the swap point for a second provider, and
- * the boundary the future answer-improvement / card-generation prompts will
- * also sit behind. Concept-card grading (keyPoints present) widens the
- * return shape to ConceptGradeResponse rather than needing a second method —
- * callers (GradeController) just pass the response through untouched.
- */
-export interface AiGrader {
-  grade(input: GradeRequest): Promise<GradeResponse | ConceptGradeResponse>;
-}
+export type GradeResult = (GradeResponse | ConceptGradeResponse) & {
+  usageId: string;
+};
 
 @Injectable()
-export class AnthropicGrader implements AiGrader {
-  private readonly logger = new Logger(AnthropicGrader.name);
-  // No explicit apiKey — let the SDK resolve credentials itself (env var,
-  // then an `ant auth login` profile). Passing an empty-string env value
-  // here would shadow a working profile instead of falling through to it.
-  private readonly client = new Anthropic();
+export class GradeService {
+  private readonly logger = new Logger(GradeService.name);
 
-  async grade(
-    input: GradeRequest,
-  ): Promise<GradeResponse | ConceptGradeResponse> {
+  constructor(
+    private readonly llm: LlmService,
+    private readonly prisma: PrismaService,
+  ) {}
+
+  async grade(ownerId: string, input: GradeRequest): Promise<GradeResult> {
     const isConcept = (input.keyPoints?.length ?? 0) > 0;
 
     const userTurnLines = [
@@ -76,25 +66,29 @@ export class AnthropicGrader implements AiGrader {
     }
     const userTurn = userTurnLines.join('\n');
 
-    const response = await this.client.messages.parse({
-      model: MODEL,
-      max_tokens: isConcept ? 1024 : 256,
-      system: isConcept ? CONCEPT_SYSTEM_PROMPT : SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: userTurn }],
-      output_config: {
-        format: zodOutputFormat(
-          isConcept ? conceptGradeResponseSchema : gradeResponseSchema,
-        ),
+    const user = await this.prisma.user.findUnique({
+      where: { id: ownerId },
+      select: { gradingModel: true },
+    });
+    const model = resolveModelForTask(user?.gradingModel, 'grading');
+
+    this.logger.debug(`Grading via ${model.id} for ${ownerId}`);
+
+    const { output, usageId } = await this.llm.run({
+      ownerId,
+      task: 'grading',
+      model,
+      localSignal: input.localSignal,
+      request: {
+        system: isConcept ? CONCEPT_SYSTEM_PROMPT : SYSTEM_PROMPT,
+        user: { text: userTurn },
+        schema: isConcept ? conceptGradeResponseSchema : gradeResponseSchema,
+        schemaName: 'grade_result',
+        maxOutputTokens: isConcept ? 1024 : 256,
+        reasoning: 'none',
       },
     });
 
-    if (response.stop_reason === 'refusal' || !response.parsed_output) {
-      this.logger.warn(
-        `AI grade did not resolve (stop_reason=${response.stop_reason})`,
-      );
-      throw new Error('AI grading failed to produce a verdict');
-    }
-
-    return response.parsed_output;
+    return { ...output, usageId };
   }
 }

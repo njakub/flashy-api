@@ -1,9 +1,11 @@
 import { Module } from '@nestjs/common';
 import { GradeController } from './grade.controller';
-import { AnthropicGrader } from './grade.service';
+import { GradeService } from './grade.service';
+import { LlmModule } from '../llm/llm.module';
 
 @Module({
+  imports: [LlmModule],
   controllers: [GradeController],
-  providers: [AnthropicGrader],
+  providers: [GradeService],
 })
 export class GradeModule {}

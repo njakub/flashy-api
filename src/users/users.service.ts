@@ -1,12 +1,19 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import type { User } from '../generated/prisma/client';
-import type { GradingDefaultDto } from './users.schema';
+import type { UpdateProfileDto, GradingDefaultDto } from './users.schema';
+import { getModel } from '../llm/models';
 
 export interface Profile {
   userId: string;
   email: string;
   gradingDefault: GradingDefaultDto;
+  gradingModel: string;
+  generationModel: string;
   /// A user can have both set (password added after linking Google, or vice
   /// versa) — these are independent flags, not a single exclusive method.
   hasPassword: boolean;
@@ -22,6 +29,8 @@ const toProfile = (user: User): Profile => ({
   userId: user.id,
   email: user.email,
   gradingDefault: toWireGradingDefault(user.gradingDefault),
+  gradingModel: user.gradingModel,
+  generationModel: user.generationModel,
   hasPassword: user.passwordHash !== null,
   hasGoogle: user.googleId !== null,
 });
@@ -36,13 +45,37 @@ export class UsersService {
     return toProfile(user);
   }
 
-  async updateGradingDefault(
-    userId: string,
-    gradingDefault: GradingDefaultDto,
-  ): Promise<Profile> {
+  async updateProfile(userId: string, dto: UpdateProfileDto): Promise<Profile> {
+    if (
+      dto.gradingModel &&
+      !getModel(dto.gradingModel)?.tasks.includes('grading')
+    ) {
+      throw new BadRequestException(
+        `"${dto.gradingModel}" is not a valid grading model`,
+      );
+    }
+    if (
+      dto.generationModel &&
+      !getModel(dto.generationModel)?.tasks.includes('generation')
+    ) {
+      throw new BadRequestException(
+        `"${dto.generationModel}" is not a valid generation model`,
+      );
+    }
+
     const user = await this.prisma.user.update({
       where: { id: userId },
-      data: { gradingDefault: toDbGradingDefault(gradingDefault) },
+      data: {
+        ...(dto.gradingDefault !== undefined && {
+          gradingDefault: toDbGradingDefault(dto.gradingDefault),
+        }),
+        ...(dto.gradingModel !== undefined && {
+          gradingModel: dto.gradingModel,
+        }),
+        ...(dto.generationModel !== undefined && {
+          generationModel: dto.generationModel,
+        }),
+      },
     });
     return toProfile(user);
   }
