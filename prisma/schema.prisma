@@ -36,6 +36,14 @@ model User {
   /// Google's stable account id ("sub" claim). Set on first Google sign-in,
   /// whether creating a new user or linking to an existing email/password one.
   googleId     String?  @unique
+  /// Apple's stable account id ("sub" claim of the identity token). Set on
+  /// first Sign in with Apple, same linking rules as googleId.
+  appleId      String?  @unique
+  /// Apple OAuth refresh token from the authorization-code exchange at
+  /// sign-in. Stored ONLY so DELETE /auth/account can revoke Apple's grant
+  /// (required alongside Guideline 5.1.1(v) in-app account deletion). Null
+  /// when the client sent no code or the exchange isn't configured.
+  appleRefreshToken String?
   name         String?
   image        String?
   /// Which grader Test mode uses by default. AI still requires a signed-in

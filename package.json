@@ -33,6 +33,7 @@
     "argon2": "^0.41.1",
     "dotenv": "^16.4.7",
     "google-auth-library": "^10.9.0",
+    "jose": "^6.2.3",
     "openai": "^6.45.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",

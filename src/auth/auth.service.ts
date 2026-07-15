@@ -1,14 +1,20 @@
 import {
   ConflictException,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
 import { OAuth2Client } from 'google-auth-library';
 import { PrismaService } from '../prisma/prisma.service';
-import type { RegisterDto, LoginDto } from './auth.schema';
+import type { RegisterDto, LoginDto, AppleDto } from './auth.schema';
 import type { JwtPayload } from './auth.types';
+import {
+  exchangeAppleAuthorizationCode,
+  revokeAppleRefreshToken,
+  verifyAppleIdentityToken,
+} from './apple.util';
 import {
   REFRESH_TOKEN_TTL_MS,
   generateRefreshToken,
@@ -23,6 +29,8 @@ export interface AuthTokens {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   private readonly googleClient = new OAuth2Client(
     process.env['GOOGLE_CLIENT_ID'],
   );
@@ -104,6 +112,88 @@ export class AuthService {
     }
 
     return this.issueTokens(user.id, user.email);
+  }
+
+  /**
+   * Sign in with Apple — same find-or-link-or-create shape as googleSignIn,
+   * keyed on appleId. Differences forced by Apple's model:
+   *   - The name never appears in the identity token; the client forwards
+   *     fullName from the native sheet, and only on FIRST authorization.
+   *   - A repeat sign-in for an unknown appleId with no verified email in
+   *     the token cannot be linked or created -> 401.
+   *   - authorizationCode (when present and Apple key env vars are set) is
+   *     exchanged for an Apple refresh token, stored so deleteAccount can
+   *     revoke Apple's grant. Best-effort: sign-in never fails on it.
+   */
+  async appleSignIn(dto: AppleDto): Promise<AuthTokens> {
+    const identity = await verifyAppleIdentityToken(dto.identityToken);
+    if (!identity) {
+      throw new UnauthorizedException('Invalid Apple identity token');
+    }
+
+    const { sub: appleId, email, emailVerified } = identity;
+
+    let user = await this.prisma.user.findUnique({ where: { appleId } });
+
+    if (!user) {
+      if (!email || !emailVerified) {
+        throw new UnauthorizedException(
+          'Apple token has no verified email to create or link an account',
+        );
+      }
+      const name =
+        [dto.fullName?.givenName, dto.fullName?.familyName]
+          .filter(Boolean)
+          .join(' ') || undefined;
+
+      const existing = await this.prisma.user.findUnique({ where: { email } });
+      user = existing
+        ? await this.prisma.user.update({
+            where: { id: existing.id },
+            data: { appleId },
+          })
+        : await this.prisma.user.create({ data: { email, appleId, name } });
+    }
+
+    if (dto.authorizationCode) {
+      const appleRefreshToken = await exchangeAppleAuthorizationCode(
+        dto.authorizationCode,
+      );
+      if (appleRefreshToken) {
+        await this.prisma.user.update({
+          where: { id: user.id },
+          data: { appleRefreshToken },
+        });
+      }
+    }
+
+    return this.issueTokens(user.id, user.email);
+  }
+
+  /**
+   * Account deletion (App Store Guideline 5.1.1(v)): revoke Apple's grant
+   * when one is stored (best-effort), then hard-delete everything the user
+   * owns. Decks cascade to cards/test runs/questions; the user row cascades
+   * to refresh tokens and LLM usage. Idempotent — deleting an already-gone
+   * account is a no-op.
+   */
+  async deleteAccount(userId: string): Promise<void> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) return;
+
+    if (user.appleRefreshToken) {
+      const revoked = await revokeAppleRefreshToken(user.appleRefreshToken);
+      if (!revoked) {
+        this.logger.warn(
+          `Apple token revocation failed for user ${userId} — proceeding with deletion`,
+        );
+      }
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.deck.deleteMany({ where: { ownerId: userId } }),
+      this.prisma.user.delete({ where: { id: userId } }),
+    ]);
   }
 
   /** Rotates the refresh token: the old one is revoked, a new pair issued. */
