@@ -93,6 +93,11 @@ model Deck {
   id        String    @id
   ownerId   String
   name      String
+  /// Parent deck for nesting; null = top-level. Deliberately no @relation /
+  /// FK: sync pushes decks in arbitrary order, so a child may reference a
+  /// parent the server hasn't seen yet. Clients render dangling or cyclic
+  /// parents defensively (see flashy/src/lib/decks/tree.ts).
+  parentId  String?
   createdAt DateTime
   updatedAt DateTime
   deletedAt DateTime?
@@ -102,6 +107,7 @@ model Deck {
   testRuns TestRun[]
 
   @@index([ownerId, rev])
+  @@index([parentId])
 }
 
 // ---------------------------------------------------------------------------

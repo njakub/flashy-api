@@ -22,6 +22,10 @@ export type SyncCursor = z.infer<typeof syncCursorSchema>;
 const pushDeckSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
+  // Deck nesting — optional/additive like pushCardSchema.keyPoints. Absent
+  // means "an old client pushed this row and doesn't know the field" (leave
+  // the stored parent unchanged); null means explicitly top-level.
+  parentId: z.string().min(1).nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
   deletedAt: z.string().nullable(),

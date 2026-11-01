@@ -83,3 +83,51 @@ describe('pushCardSchema — unknown fields', () => {
     }
   });
 });
+
+describe('pushDeckSchema — parentId', () => {
+  function deckRequest(overrides: Record<string, unknown> = {}) {
+    return {
+      cursor: { decks: '0', cards: '0', testRuns: '0', testRunQuestions: '0' },
+      push: {
+        decks: [
+          {
+            id: 'd2',
+            name: 'Hooks',
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+            deletedAt: null,
+            ...overrides,
+          },
+        ],
+        cards: [],
+        testRuns: [],
+        testRunQuestions: [],
+      },
+    };
+  }
+
+  it('accepts a parent id', () => {
+    const result = syncRequestSchema.safeParse(deckRequest({ parentId: 'd1' }));
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.push.decks[0].parentId).toBe('d1');
+  });
+
+  it('accepts null (explicitly top-level)', () => {
+    const result = syncRequestSchema.safeParse(deckRequest({ parentId: null }));
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.push.decks[0].parentId).toBeNull();
+  });
+
+  it('accepts absent — parses to undefined (old client), not null', () => {
+    const result = syncRequestSchema.safeParse(deckRequest());
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.push.decks[0].parentId).toBeUndefined();
+    }
+  });
+
+  it('rejects an empty string', () => {
+    const result = syncRequestSchema.safeParse(deckRequest({ parentId: '' }));
+    expect(result.success).toBe(false);
+  });
+});

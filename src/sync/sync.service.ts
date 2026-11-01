@@ -151,6 +151,8 @@ export class SyncService {
     const existing = await tx.deck.findUnique({ where: { id: d.id } });
     if (existing && existing.ownerId !== ownerId) return;
 
+    const parentId = await this.resolveDeckParent(tx, ownerId, d);
+
     if (!existing) {
       const rev = await this.nextRev(tx, 'Deck');
       await tx.deck.create({
@@ -158,6 +160,7 @@ export class SyncService {
           id: d.id,
           ownerId,
           name: d.name,
+          parentId: parentId ?? null,
           createdAt: new Date(d.createdAt),
           updatedAt: new Date(d.updatedAt),
           deletedAt: d.deletedAt ? new Date(d.deletedAt) : null,
@@ -178,6 +181,8 @@ export class SyncService {
       where: { id: d.id },
       data: {
         name: d.name,
+        // Absent = old client; keep whatever parent is stored.
+        ...(parentId !== undefined && { parentId }),
         updatedAt: incomingUpdatedAt,
         deletedAt: d.deletedAt ? new Date(d.deletedAt) : null,
         rev,
@@ -189,6 +194,28 @@ export class SyncService {
     if (!wasDeleted && nowDeleted) {
       await this.cascadeDeleteDeck(tx, d.id);
     }
+  }
+
+  /**
+   * Incoming parentId, sanitised: undefined stays undefined (field absent),
+   * and a self-reference or a parent owned by someone else becomes null. A
+   * parent the server hasn't seen yet is kept — it may arrive later. Tree
+   * shape (cycles, tombstoned parents) is NOT validated here; clients
+   * render those defensively. Deleting a parent also doesn't cascade to
+   * child decks server-side — clients tombstone the whole subtree.
+   */
+  private async resolveDeckParent(
+    tx: Tx,
+    ownerId: string,
+    d: PushDeck,
+  ): Promise<string | null | undefined> {
+    if (d.parentId === undefined || d.parentId === null) return d.parentId;
+    if (d.parentId === d.id) return null;
+    const parent = await tx.deck.findUnique({
+      where: { id: d.parentId },
+      select: { ownerId: true },
+    });
+    return parent && parent.ownerId !== ownerId ? null : d.parentId;
   }
 
   private async applyCard(tx: Tx, ownerId: string, c: PushCard): Promise<void> {
@@ -398,6 +425,7 @@ export class SyncService {
       id: d.id,
       ownerId: d.ownerId,
       name: d.name,
+      parentId: d.parentId,
       createdAt: d.createdAt.toISOString(),
       updatedAt: d.updatedAt.toISOString(),
       deletedAt: d.deletedAt ? d.deletedAt.toISOString() : null,
